@@ -13,8 +13,8 @@ public class PlayerMovement : MonoBehaviour
     private ClimbingMechanics climbMechanics;
 
     [Header("Movement Settings")]
-    [SerializeField] float walkSpeed = 4.5f;
-    [SerializeField] float sprintSpeed = 6.5f;
+    [SerializeField] float walkSpeed = 10f;
+    [SerializeField] float sprintSpeed = 20f;
     [SerializeField] float gravity = -22f;
     [SerializeField] float jumpHeight = 2.0f;
     [SerializeField] Transform cameraTransform;
@@ -249,9 +249,6 @@ public class PlayerMovement : MonoBehaviour
         // --- Update stamina bar ---
         if (staminaBar != null)
             staminaBar.SetStamina(currentStamina);
-
-        // Optional debug (uncomment to help trace problems)
-        // Debug.Log($"isSprinting:{isSprinting} locked:{sprintLocked} stamina:{currentStamina:F1}");
     }
 
     void DoJump()
