@@ -1,182 +1,223 @@
-ï»¿using System.Collections;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class PlayerMovement : MonoBehaviour
 {
-    private PlayerInput playerInput;
-    private InputAction moveAction;
-    private CharacterController controller;
-    private cameracode cameraCode;
-    private ClimbingMechanics climbMechanics;
-
-    [Header("Movement Settings")]
-    [SerializeField] float walkSpeed = 10f;
-    [SerializeField] float sprintSpeed = 20f;
-    [SerializeField] float gravity = -22f;
-    [SerializeField] float jumpHeight = 2.0f;
-    [SerializeField] Transform cameraTransform;
-
-    [Header("FOV Sprint Effect")]
-    [SerializeField] Camera playerCamera;
-    [SerializeField] float normalFOV = 60f;
-    [SerializeField] float sprintFOV = 65f;
-    [SerializeField] float fovChangeSpeed = 8f;
-
-    [Header("Key Bindings")]
-    [SerializeField] Key sprintKey = Key.LeftShift;
-    [SerializeField] Key jumpKey = Key.Space;
-
-    [Header("Jump Settings")]
-    [SerializeField] bool useJumpCooldown = true;
-    [SerializeField] float jumpCooldown = 0.3f;
-    private float lastJumpTime = -Mathf.Infinity;
-
-    [Header("Ground Checker")]
-    [SerializeField] Transform groundCheck;
-    [SerializeField] float groundDistance = 0.15f;
-    [SerializeField] LayerMask groundMask;
-
-    [Header("Air Control")]
-    [SerializeField] float airControlMultiplier = 0.8f;
-    [SerializeField] float backwardMultiplier = 0.5f;
+    Animator animator;
+    int isRunningHash, isSprintingHash, isLeftHash, isRightHash, isBackwardHash,
+        isJumpUpHash, isJumpDownHash;
 
     [Header("Stamina Settings")]
-    [SerializeField] private float maxStamina = 100f;
     [SerializeField] private float staminaDrain = 20f; // per second while sprinting
     [SerializeField] private float staminaRegen = 10f; // per second while resting
-    [SerializeField] private StaminaBar staminaBar;
-    private float currentStamina;
+    public StaminaBar staminaBar;
+    public float maxStamina = 100f;
+    public float currentStamina;
 
-    [Header("Coyote & Buffer Jump")]
-    [SerializeField] float coyoteTime = 0.15f;
-    [SerializeField] float jumpBufferTime = 0.12f;
+    [Header("Sprint Settings")]
+    [SerializeField] private KeyCode sprintKey = KeyCode.LeftShift;
+    private bool isSprinting = false;
+    private bool sprintLocked = false;
+    private bool sprintReleasedAfterDepletion = true;
+    public float walkSpeed = 3;       // normal walking speed (modifiable in Inspector)
+    public float sprintSpeed = 5;     // sprinting speed (modifiable in Inspector)
+    private float moveSpeed;
+    public float maxSpeed = 10f;
+    private bool sprintJumping = false;
+    [SerializeField] private float sprintJumpBoostDuration = 1f; // how long boost lasts
+    private float sprintJumpBoostTimer = 0f;
+    [SerializeField] private float sprintJumpBoost = 5f; // amount of forward boost
 
-    private Vector3 velocity;
-    private bool isGrounded;
-    private float coyoteTimeCounter;
-    private float jumpBufferCounter;
+    [Header("Camera FOV Sprint Effect")]
+    [SerializeField] private Camera playerCamera;
+    [SerializeField] private float normalFOV = 60f;
+    [SerializeField] private float sprintFOV = 68f;
+    [SerializeField] private float fovChangeSpeed = 6f;
 
-    // ----------- NEW: sprint state & lock variables -----------
-    private bool isSprinting = false;                      // persistent sprint state used by MovePlayer() and HandleFOV()
-    private bool sprintLocked = false;                     // locked after depletion; prevents auto re-sprint
-    private bool sprintReleasedAfterDepletion = true;     // becomes true only after user releases sprint after depletion
-    private float lastExpectedFOV = 0f;                   // used to detect external FOV changes
-    // ----------------------------------------------------------
+    // Jumping
+    [Header("Jump Settings")]
+    private bool readyToJump = true;
+    [SerializeField] private float jumpCooldown = 0.25f;
+    public float jumpForce = 6;
+
+    private bool fovKickActive = false;
+
+    // Assignables
+    public Transform playerCam;
+    public Transform orientation;
+
+    // Other
+    private Rigidbody rb;
+
+    // Rotation and look
+    private float xRotation;
+    private float sensitivity = 50f;
+    private float sensMultiplier = 1f;
+
+    // Ground
+    public bool grounded;
+    public LayerMask whatIsGround;
+
+    public float counterMovement = 0.175f;
+    private float threshold = 0.01f;
+    public float maxSlopeAngle = 35f;
+
+    // Crouch
+    private Vector3 crouchScale = new Vector3(1, 0.5f, 1);
+    private Vector3 playerScale;
+    public float crouchSpeedMultiplier = 0.5f;
+
+    // Input
+    float x, y;
+    bool jumping, crouching;
+
+    // Ground normals
+    private Vector3 normalVector = Vector3.up;
+    private bool cancellingGrounded;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody>();
+    }
 
     void Start()
     {
-        playerInput = GetComponent<PlayerInput>();
-        moveAction = playerInput.actions.FindAction("Move");
-        controller = GetComponent<CharacterController>();
-        cameraCode = playerCamera.GetComponent<cameracode>();
-        climbMechanics = GetComponent<ClimbingMechanics>();
+        playerScale = transform.localScale;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
 
+        staminaBar.SetMaxStamina(maxStamina);
         currentStamina = maxStamina;
         if (staminaBar != null)
             staminaBar.SetMaxStamina(maxStamina);
 
-        // initialize
-        if (playerCamera != null) lastExpectedFOV = playerCamera.fieldOfView;
-        sprintReleasedAfterDepletion = true;
-        sprintLocked = false;
+        animator = GetComponent<Animator>();
+        isRunningHash = Animator.StringToHash("isRunning");
+        isSprintingHash = Animator.StringToHash("isSprinting");
+        isRightHash = Animator.StringToHash("isRight");
+        isLeftHash = Animator.StringToHash("isLeft");
+        isBackwardHash = Animator.StringToHash("isBack");
+        isJumpUpHash = Animator.StringToHash("isJumpUp");
+        isJumpDownHash = Animator.StringToHash("isJumpDown");
     }
 
-    void Update()
+    private void FixedUpdate()
     {
-        isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+        Movement();
+    }
 
-        HandleJumpTiming();
+    private void Update()
+    {
+        MyInput();
+        Look();
         HandleFOV();
 
-        // Stop gravity if currently climbing
-        if (!climbMechanics.IsClimbing)
+        // --- Animator Movements ---
+        bool forwardPressed = Keyboard.current[Key.W].isPressed;
+        bool rightPressed = Keyboard.current[Key.D].isPressed;
+        bool leftPressed = Keyboard.current[Key.A].isPressed;
+        bool backwardPressed = Keyboard.current[Key.S].isPressed;
+
+        // ?? FIXED: Removed "jumpPressed" check — now based on actual movement
+        animator.SetBool(isJumpUpHash, !grounded && rb.velocity.y > 0f);
+        animator.SetBool(isJumpDownHash, !grounded && rb.velocity.y < 0f);
+
+        if (grounded)
         {
-            MovePlayer();
-            velocity.y += gravity * Time.deltaTime;
-            controller.Move(velocity * Time.deltaTime);
+            animator.SetBool(isJumpUpHash, false);
+            animator.SetBool(isJumpDownHash, false);
+        }
+        animator.SetBool(isRunningHash, forwardPressed);
+        animator.SetBool(isBackwardHash, backwardPressed);
+        animator.SetBool(isSprintingHash, forwardPressed && isSprinting);
+        animator.SetBool(isRightHash, rightPressed && !leftPressed);
+        animator.SetBool(isLeftHash, leftPressed && !rightPressed);
+    }
+
+    private void MyInput()
+    {
+        x = Input.GetAxisRaw("Horizontal");
+        y = Input.GetAxisRaw("Vertical");
+        jumping = Input.GetButton("Jump");
+        crouching = Input.GetKey(KeyCode.LeftControl);
+
+        if (Input.GetKeyDown(KeyCode.LeftControl))
+            StartCrouch();
+        if (Input.GetKeyUp(KeyCode.LeftControl))
+            StopCrouch();
+    }
+
+    private void StartCrouch()
+    {
+        if (playerCam != null)
+        {
+            Vector3 camPos = playerCam.transform.localPosition;
+            camPos.y -= 0.5f; // move camera down slightly
+            playerCam.transform.localPosition = camPos;
         }
     }
 
-    // LateUpdate enforces FOV (helps if another script tries to override it)
-    void LateUpdate()
+    private void StopCrouch()
     {
-        if (playerCamera == null) return;
-
-        // If something else changed FOV unexpectedly, force it back and warn in console.
-        float diff = Mathf.Abs(playerCamera.fieldOfView - lastExpectedFOV);
-        if (diff > 0.05f) // small tolerance
+        if (playerCam != null)
         {
-            Debug.LogWarning($"[PlayerMovement] External FOV change detected (diff {diff:F2}). Forcing expected FOV.");
-            playerCamera.fieldOfView = lastExpectedFOV;
+            Vector3 camPos = playerCam.transform.localPosition;
+            camPos.y += 0.5f; // move camera back up
+            playerCam.transform.localPosition = camPos;
         }
     }
 
-    void HandleJumpTiming()
+    private void HandleFOV()
     {
-        if (isGrounded)
-            coyoteTimeCounter = coyoteTime;
-        else
-            coyoteTimeCounter -= Time.deltaTime;
+        if (!playerCamera) return;
 
-        if (Keyboard.current[jumpKey].wasPressedThisFrame)
-            jumpBufferCounter = jumpBufferTime;
+        float targetFOV;
+
+        if (sprintJumping)
+            targetFOV = sprintFOV + 5f; // keep FOV kick in air
         else
-            jumpBufferCounter -= Time.deltaTime;
+            targetFOV = isSprinting ? sprintFOV : normalFOV;
+
+        playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFOV, fovChangeSpeed * Time.deltaTime);
     }
 
-    void HandleFOV()
+    private void Movement()
     {
-        // Use shared isSprinting variable (not recalculating from input here)
-        float targetFOV = isSprinting ? sprintFOV : normalFOV;
+        // --- Apply downward force for consistent grounding ---
+        rb.AddForce(Vector3.down * Time.deltaTime * 10);
 
-        playerCamera.fieldOfView = Mathf.Lerp(
-            playerCamera.fieldOfView,
-            targetFOV,
-            fovChangeSpeed * Time.deltaTime);
+        // --- Get input ---
+        x = Input.GetAxisRaw("Horizontal");
+        y = Input.GetAxisRaw("Vertical");
+        bool forwardPressed = y > 0;
+        bool backwardPressed = y < 0;
 
-        // remember expected FOV so LateUpdate can detect overrides
-        lastExpectedFOV = playerCamera.fieldOfView;
-    }
+        // --- Counter movement to prevent sliding ---
+        Vector2 mag = FindVelRelativeToLook();
+        CounterMovement(x, y, mag);
 
-    void MovePlayer()
-    {
-        Vector2 input = moveAction.ReadValue<Vector2>();
+        // --- Jump ---
+        if (readyToJump && jumping) Jump();
 
-        Vector3 forward = transform.forward;
-        Vector3 right = transform.right;
-        forward.y = right.y = 0;
-        forward.Normalize();
-        right.Normalize();
+        // --- Sprint handling ---
+        bool sprintPressed = Input.GetKey(sprintKey);
+        bool sprintReleased = Input.GetKeyUp(sprintKey);
 
-        Vector3 direction = forward * input.y + right * input.x;
-        if (direction.sqrMagnitude > 1f) direction.Normalize();
-
-        // read sprint inputs
-        bool wantsToSprint = Keyboard.current[sprintKey].isPressed && Keyboard.current[Key.W].isPressed;
-        bool sprintPressedThisFrame = Keyboard.current[sprintKey].wasPressedThisFrame;
-        bool sprintReleasedThisFrame = Keyboard.current[sprintKey].wasReleasedThisFrame;
-
-        // ---------- SPRINT LOCK + RELEASE LOGIC ----------
-        // If stamina depleted -> immediately stop sprint and lock sprint until user releases and re-presses
         if (currentStamina <= 0f)
         {
+            currentStamina = 0f;
             isSprinting = false;
             sprintLocked = true;
-            sprintReleasedAfterDepletion = false; // require a release
+            sprintReleasedAfterDepletion = false;
         }
         else
         {
             if (sprintLocked)
             {
-                // detect release after depletion
-                if (sprintReleasedThisFrame)
-                    sprintReleasedAfterDepletion = true;
-
-                // only allow re-sprint if player has released and then pressed again while holding W
-                if (sprintReleasedAfterDepletion && sprintPressedThisFrame && Keyboard.current[Key.W].isPressed)
+                if (sprintReleased) sprintReleasedAfterDepletion = true;
+                if (sprintReleasedAfterDepletion && sprintPressed && grounded && forwardPressed)
                 {
                     sprintLocked = false;
                     sprintReleasedAfterDepletion = false;
@@ -184,77 +225,228 @@ public class PlayerMovement : MonoBehaviour
                 }
                 else
                 {
-                    // locked -> no sprint allowed
                     isSprinting = false;
                 }
             }
             else
             {
-                // normal behavior if not locked
-                if (wantsToSprint)
-                    isSprinting = true;
-                else
-                    isSprinting = false;
+                isSprinting = sprintPressed && grounded && !crouching && forwardPressed;
             }
         }
-        // -------------------------------------------------
 
-        // --- Movement speed ---
-        float targetSpeed = isSprinting ? sprintSpeed : walkSpeed;
-        float control = (!isGrounded)
-            ? (input.y < 0f ? backwardMultiplier : airControlMultiplier)
-            : 1f;
+        // --- Determine target speed ---
+        float targetSpeed = isSprinting ? sprintSpeed : (crouching ? walkSpeed * crouchSpeedMultiplier : walkSpeed);
 
-        Vector3 horizontalVelocity = new Vector3(velocity.x, 0f, velocity.z);
-        float currentSpeed = horizontalVelocity.magnitude;
-        float smoothSpeed = Mathf.Lerp(currentSpeed, targetSpeed * control, Time.deltaTime * 10f);
-        Vector3 move = direction * smoothSpeed;
-
-        if (isGrounded && velocity.y < 0f)
-            velocity.y = -2f;
-
-        // --- Handle jumping ---
-        if (coyoteTimeCounter > 0f && jumpBufferCounter > 0f)
+        // --- Air control multiplier ---
+        float controlMultiplier = 1f;
+        if (!grounded)
         {
-            if (!useJumpCooldown || Time.time >= lastJumpTime + jumpCooldown)
-            {
-                DoJump();
-                jumpBufferCounter = 0f;
-            }
+            controlMultiplier = forwardPressed ? 0.8f : (backwardPressed ? 0.5f : 0.8f);
         }
 
-        velocity.y += gravity * Time.deltaTime;
-        Vector3 totalMotion = move + Vector3.up * velocity.y;
-        controller.Move(totalMotion * Time.deltaTime);
+        // --- Calculate movement direction relative to player orientation ---
+        Vector3 forwardDir = orientation.forward;
+        Vector3 rightDir = orientation.right;
+        forwardDir.y = 0f;
+        rightDir.y = 0f;
+        forwardDir.Normalize();
+        rightDir.Normalize();
+
+        Vector3 moveDir = forwardDir * y + rightDir * x;
+        if (moveDir.sqrMagnitude > 1f) moveDir.Normalize();
+
+        // --- Apply horizontal velocity with air control ---
+        Vector3 horizontalVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+        Vector3 desiredVel = moveDir * targetSpeed * controlMultiplier;
+
+        // Apply sprint jump boost if active or if sprintJumping
+        if (sprintJumping && sprintJumpBoostTimer > 0f)
+        {
+            desiredVel += orientation.forward * sprintJumpBoost;
+            sprintJumpBoostTimer -= Time.fixedDeltaTime;
+        }
+
+        // Apply velocity
+        Vector3 velocityChange = desiredVel - horizontalVel;
+        rb.AddForce(velocityChange, ForceMode.VelocityChange);
+
+        // Reset boost when grounded
+        if (grounded && sprintJumping)
+        {
+            sprintJumping = false;
+            sprintJumpBoostTimer = 0f;
+            sprintJumpBoost = 0f; // reset the boost
+        }
+
+
+        // --- Apply gravity ---
+        if (!grounded)
+            rb.AddForce(Vector3.up * Physics.gravity.y * Time.deltaTime);
 
         // --- Stamina drain / regen ---
         if (isSprinting)
         {
-            currentStamina -= staminaDrain * Time.deltaTime;
-            if (currentStamina <= 0f)
-            {
-                currentStamina = 0f;
-                isSprinting = false; // instantly stop sprinting
-                sprintLocked = true;  // lock sprint until release+press
-                sprintReleasedAfterDepletion = false;
-            }
+            currentStamina -= staminaDrain * Time.fixedDeltaTime;
+            if (currentStamina < 0f) currentStamina = 0f;
         }
         else
         {
-            currentStamina += staminaRegen * Time.deltaTime;
-            if (currentStamina > maxStamina)
-                currentStamina = maxStamina;
+            currentStamina += staminaRegen * Time.fixedDeltaTime;
+            if (currentStamina > maxStamina) currentStamina = maxStamina;
         }
 
-        // --- Update stamina bar ---
         if (staminaBar != null)
             staminaBar.SetStamina(currentStamina);
+
+        // --- Limit speed ---
+        float maxVel = targetSpeed;
+        Vector3 flatVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+        if (flatVel.magnitude > maxVel)
+        {
+            Vector3 limitedVel = flatVel.normalized * maxVel;
+            rb.velocity = new Vector3(limitedVel.x, rb.velocity.y, limitedVel.z);
+        }
     }
 
-    void DoJump()
+
+    private void Jump()
     {
-        velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-        lastJumpTime = Time.time;
-        coyoteTimeCounter = 0f;
+        if (grounded && readyToJump)
+        {
+            readyToJump = false;
+
+            // Apply upward jump force
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            // Trigger sprint jump boost
+            if (isSprinting && y > 0)
+            {
+                sprintJumping = true;
+                sprintJumpBoost = 3f; // increased from 2f to 3f for a stronger boost
+                sprintJumpBoostTimer = sprintJumpBoostDuration;
+
+                StartCoroutine(FOVKick(sprintFOV + 5f, sprintJumpBoostDuration));
+            }
+
+
+            Invoke(nameof(ResetJump), jumpCooldown);
+        }
     }
+
+    private IEnumerator FOVKick(float targetFOV, float duration)
+    {
+        fovKickActive = true;
+        float startFOV = playerCamera.fieldOfView;
+        float time = 0f;
+
+        // Ramp up to target FOV
+        while (time < duration)
+        {
+            playerCamera.fieldOfView = Mathf.Lerp(startFOV, targetFOV, time / duration);
+            time += Time.deltaTime;
+            yield return null;
+        }
+        playerCamera.fieldOfView = targetFOV;
+
+        // Wait a tiny bit to make the kick noticeable
+        yield return new WaitForSeconds(0.1f);
+
+        // Smoothly reset FOV to normal/sprint
+        float resetFOV = isSprinting ? sprintFOV : normalFOV;
+        float currentFOV = playerCamera.fieldOfView;
+        float resetDuration = 0.4f; // slower reset for smoother feel
+        time = 0f;
+
+        while (time < resetDuration)
+        {
+            playerCamera.fieldOfView = Mathf.Lerp(currentFOV, resetFOV, time / resetDuration);
+            time += Time.deltaTime;
+            yield return null;
+        }
+
+        playerCamera.fieldOfView = resetFOV;
+        fovKickActive = false;
+    }
+
+
+
+    private void ResetJump() => readyToJump = true;
+
+    private void Look()
+    {
+        float mouseX = Input.GetAxis("Mouse X") * sensitivity * Time.fixedDeltaTime * sensMultiplier;
+        float mouseY = Input.GetAxis("Mouse Y") * sensitivity * Time.fixedDeltaTime * sensMultiplier;
+
+        Vector3 rot = playerCam.transform.localRotation.eulerAngles;
+        float desiredX = rot.y + mouseX;
+
+        xRotation -= mouseY;
+        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+
+        playerCam.transform.localRotation = Quaternion.Euler(xRotation, desiredX, 0);
+        orientation.transform.localRotation = Quaternion.Euler(0, desiredX, 0);
+    }
+
+    private void CounterMovement(float x, float y, Vector2 mag)
+    {
+        if (!grounded) return;
+
+        if (Math.Abs(mag.x) > threshold && Math.Abs(x) < 0.05f || (mag.x < -threshold && x > 0) || (mag.x > threshold && x < 0))
+            rb.AddForce(moveSpeed * orientation.right * Time.deltaTime * -mag.x * counterMovement);
+        if (Math.Abs(mag.y) > threshold && Math.Abs(y) < 0.05f || (mag.y < -threshold && y > 0) || (mag.y > threshold && y < 0))
+            rb.AddForce(moveSpeed * orientation.forward * Time.deltaTime * -mag.y * counterMovement);
+
+        if (Mathf.Sqrt(rb.velocity.x * rb.velocity.x + rb.velocity.z * rb.velocity.z) > maxSpeed)
+        {
+            float fallspeed = rb.velocity.y;
+            Vector3 n = rb.velocity.normalized * maxSpeed;
+            rb.velocity = new Vector3(n.x, fallspeed, n.z);
+        }
+    }
+
+    public Vector2 FindVelRelativeToLook()
+    {
+        float lookAngle = orientation.eulerAngles.y;
+        float moveAngle = Mathf.Atan2(rb.velocity.x, rb.velocity.z) * Mathf.Rad2Deg;
+
+        float u = Mathf.DeltaAngle(lookAngle, moveAngle);
+        float v = 90 - u;
+
+        float magnitude = rb.velocity.magnitude;
+        float yMag = magnitude * Mathf.Cos(u * Mathf.Deg2Rad);
+        float xMag = magnitude * Mathf.Cos(v * Mathf.Deg2Rad);
+
+        return new Vector2(xMag, yMag);
+    }
+
+    private bool IsFloor(Vector3 v)
+    {
+        float angle = Vector3.Angle(Vector3.up, v);
+        return angle < maxSlopeAngle;
+    }
+
+    private void OnCollisionStay(Collision other)
+    {
+        int layer = other.gameObject.layer;
+        if (whatIsGround != (whatIsGround | (1 << layer))) return;
+
+        for (int i = 0; i < other.contactCount; i++)
+        {
+            Vector3 normal = other.contacts[i].normal;
+            if (IsFloor(normal))
+            {
+                grounded = true;
+                cancellingGrounded = false;
+                normalVector = normal;
+                CancelInvoke(nameof(StopGrounded));
+            }
+        }
+
+        if (!cancellingGrounded)
+        {
+            cancellingGrounded = true;
+            Invoke(nameof(StopGrounded), Time.deltaTime * 3f);
+        }
+    }
+
+    private void StopGrounded() => grounded = false;
 }

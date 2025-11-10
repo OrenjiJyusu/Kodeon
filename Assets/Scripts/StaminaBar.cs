@@ -5,32 +5,16 @@ using UnityEngine.UI;
 
 public class StaminaBar : MonoBehaviour
 {
-    [SerializeField] private Image staminaFill; // assign your green Image here
+    public Slider slider;
 
-    private float maxStamina;
-
-    // Start is called before the first frame update
-    void Start()
+    public void SetMaxStamina(float stamina)
     {
-        
+        slider.maxValue = stamina;
+        slider.value = stamina;
     }
-
-    // Update is called once per frame
-    void Update()
+    public void SetStamina(float stamina)
     {
-        
-    }
-
-
-    public void SetMaxStamina(float value)
-    {
-        maxStamina = value;
-        staminaFill.fillAmount = 1f; // full bar
-    }
-
-    public void SetStamina(float currentStamina)
-    {
-        staminaFill.fillAmount = currentStamina / maxStamina;
+        slider.value = stamina;
     }
 }
 
