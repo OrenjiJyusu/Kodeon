@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 public class PickItems : MonoBehaviour
 {
-    public GameObject Lamp;
+    public GameObject Flashlight;
     public Transform ItemParent;
     public GameObject PickupText;
 
@@ -13,7 +13,7 @@ public class PickItems : MonoBehaviour
     void Start()
     {
         PickupText.SetActive(false);
-        Lamp.GetComponent<Rigidbody>().isKinematic = true;
+        Flashlight.GetComponent<Rigidbody>().isKinematic = true;
     }
 
     // Update is called once per frame
@@ -27,22 +27,27 @@ public class PickItems : MonoBehaviour
 
     void Drop()
     {
+        GetComponent<Collider>().enabled = true;
+
         ItemParent.DetachChildren();
-        Lamp.transform.eulerAngles = new Vector3(Lamp.transform.position.x, Lamp.transform.position.z, Lamp.transform.position.y);
-        Lamp.GetComponent<Rigidbody>().isKinematic = false;
-        Lamp.GetComponent<MeshCollider>().enabled = true;
+        Flashlight.transform.eulerAngles = new Vector3(Flashlight.transform.position.x, Flashlight.transform.position.z, Flashlight.transform.position.y);
+        Flashlight.GetComponent<Rigidbody>().isKinematic = false;
+        Flashlight.GetComponent<MeshCollider>().enabled = true;
     }
 
     void Equip()
     {
-        Lamp.GetComponent<Rigidbody>().isKinematic = true;
+        GetComponent<Collider>().enabled = false;
+        PickupText.SetActive(false);
 
-        Lamp.transform.position = ItemParent.position;
-        Lamp.transform.rotation = ItemParent.rotation;
+        Flashlight.GetComponent<Rigidbody>().isKinematic = true;
 
-        Lamp.GetComponent<MeshCollider>().enabled = false;
+        Flashlight.transform.position = ItemParent.position;
+        Flashlight.transform.rotation = ItemParent.rotation;
 
-        Lamp.transform.SetParent(ItemParent);
+        Flashlight.GetComponent<MeshCollider>().enabled = false;
+
+        Flashlight.transform.SetParent(ItemParent);
     }
     private void OnTriggerStay(Collider other)
     {
