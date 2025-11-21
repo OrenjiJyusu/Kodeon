@@ -1,19 +1,23 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-public class togglelight : MonoBehaviour
+public class ToggleLight : MonoBehaviour
 {
-    public GameObject LightSource;
+    public GameObject LightSource;   // The actual light object
+    public bool isEquipped = false;  // Only allow toggle when equipped
+
     private bool isOn = false;
 
     void Update()
     {
-        
-        if (Input.GetKeyDown(KeyCode.R))
+        if (!isEquipped)
+            return;  // Ignore input if not equipped
+
+        if (Input.GetMouseButtonDown(1))
         {
-            if (!isOn) LightOn();
-            else LightOff();
+            if (isOn)
+                LightOff();
+            else
+                LightOn();
         }
     }
 
