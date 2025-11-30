@@ -5,26 +5,35 @@ TagManager:
   serializedVersion: 2
   tags:
   - Pickup
+  - Climbable
+  - Doors
+  - DungeonExitSpawn
+  - SpawnDungeon
+  - Padlock1
+  - Padlock2
+  - Padlock3
+  - Padlock4
+  - Padlock5
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Doors
   - Water
   - UI
   - Lamp
   - Obstacles
-  - FirstPersonOnly
+  - Player
   - Ground
-  - climbable
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Climbable
+  - Padlock1
+  - Ceiling
+  - Padlock2
+  - Padlock3
+  - Padlock4
+  - Padlock5
+  - Chest
+  - Book
   - 
   - 
   - 

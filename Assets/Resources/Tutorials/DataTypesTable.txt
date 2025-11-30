@@ -1,0 +1,85 @@
+
+DATA TYPES
+Used to specify the set of values and the operations allowed on them.
+
+byte:
+   • Description: 8-bit signed integer
+   • Range of Values: -128 to 127
+   • Default: 0
+   • Example: byte b = 100;
+
+short:
+   • Description: 16-bit signed integer
+   • Range of Values: -32,768 to 32,767
+   • Default: 0
+   • Example: short s = 1400;
+
+int:
+   • Description: 32-bit signed integer
+   • Range of Values: -2^31 to 2^31-1
+   • Default: 0
+   • Example: int a = 12400;
+
+long:
+   • Description: 64-bit signed integer
+   • Range of Values: -2^63 to 2^63-1
+   • Default: 0L
+   • Example: long a = 124000L;
+
+float
+   • Description: Single-precision 32-bit IEEE 754 floating-point
+   • Range of Values: 1.40239846×10^-45 to 3.40282347×10^38
+   • Default: 0.0f
+   • Example: float f1 = 234.5f;
+
+double
+   • Description: Double-precision 64-bit IEEE 754 floating-point
+   • Range of Values: 4.9406564584124654×10^-324 to 1.7976931348623157×10^308
+   • Default: 0.0d
+   • Example: double d1 = 234.5;
+
+boolean
+   • Description: One (1) bit of information
+   • Range of Values: true or false
+   • Default: false
+   • Example: boolean isCorrect = true;
+
+char
+   • Description: Single 16-bit Unicode character (UTF-16 table)
+   • Range of Values: '\u0000' to '\uffff' (0 to 65,535 inclusive)
+   • Default: '\u0000'
+   • Example: char letter = 'A';
+
+			VARIABLE
+A variable is a name for a memory location that stores a specific value, such as numbers and letters.
+
+Syntax:
+   data_type variable_name = value;
+
+Remember:
+   A semicolon “;” marks the end of a statement.
+   It acts as a statement terminator or separator so the compiler can correctly understand your code.
+
+Variable Examples
+
+byte
+   • Variable Name: b
+   • Value: 100
+
+Example:
+   byte b = 100;
+
+int
+   • Variable Name: i
+   • Value: 1000
+
+Example:
+   int i = 1000;
+
+boolean
+   • Variable Name: isCorrect
+   • Value: true
+
+Example:
+   boolean isCorrect = true;
+

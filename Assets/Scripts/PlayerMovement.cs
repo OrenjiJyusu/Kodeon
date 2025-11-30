@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -25,10 +25,6 @@ public class PlayerMovement : MonoBehaviour
     public float sprintSpeed = 5;     // sprinting speed (modifiable in Inspector)
     private float moveSpeed;
     public float maxSpeed = 10f;
-    private bool sprintJumping = false;
-    [SerializeField] private float sprintJumpBoostDuration = 1f; // how long boost lasts
-    private float sprintJumpBoostTimer = 0f;
-    [SerializeField] private float sprintJumpBoost = 5f; // amount of forward boost
 
     [Header("Camera FOV Sprint Effect")]
     [SerializeField] private Camera playerCamera;
@@ -60,14 +56,11 @@ public class PlayerMovement : MonoBehaviour
     public bool grounded;
     public LayerMask whatIsGround;
 
-    public float counterMovement = 0.175f;
     private float threshold = 0.01f;
     public float maxSlopeAngle = 35f;
 
     // Crouch
-    private Vector3 crouchScale = new Vector3(1, 0.5f, 1);
     private Vector3 playerScale;
-    public float crouchSpeedMultiplier = 0.5f;
 
     // Input
     float x, y;
@@ -120,7 +113,6 @@ public class PlayerMovement : MonoBehaviour
         bool leftPressed = Keyboard.current[Key.A].isPressed;
         bool backwardPressed = Keyboard.current[Key.S].isPressed;
 
-        // ?? FIXED: Removed "jumpPressed" check — now based on actual movement
         animator.SetBool(isJumpUpHash, !grounded && rb.velocity.y > 0f);
         animator.SetBool(isJumpDownHash, !grounded && rb.velocity.y < 0f);
 
@@ -143,30 +135,7 @@ public class PlayerMovement : MonoBehaviour
         jumping = Input.GetButton("Jump");
         crouching = Input.GetKey(KeyCode.LeftControl);
 
-        if (Input.GetKeyDown(KeyCode.LeftControl))
-            StartCrouch();
-        if (Input.GetKeyUp(KeyCode.LeftControl))
-            StopCrouch();
-    }
-
-    private void StartCrouch()
-    {
-        if (playerCam != null)
-        {
-            Vector3 camPos = playerCam.transform.localPosition;
-            camPos.y -= 0.5f; // move camera down slightly
-            playerCam.transform.localPosition = camPos;
-        }
-    }
-
-    private void StopCrouch()
-    {
-        if (playerCam != null)
-        {
-            Vector3 camPos = playerCam.transform.localPosition;
-            camPos.y += 0.5f; // move camera back up
-            playerCam.transform.localPosition = camPos;
-        }
+        // Removed crouch camera lowering, so no StartCrouch / StopCrouch calls
     }
 
     private void HandleFOV()
@@ -175,33 +144,24 @@ public class PlayerMovement : MonoBehaviour
 
         float targetFOV;
 
-        if (sprintJumping)
-            targetFOV = sprintFOV + 5f; // keep FOV kick in air
-        else
-            targetFOV = isSprinting ? sprintFOV : normalFOV;
+        targetFOV = isSprinting ? sprintFOV : normalFOV;
 
         playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFOV, fovChangeSpeed * Time.deltaTime);
     }
 
     private void Movement()
     {
-        // --- Apply downward force for consistent grounding ---
         rb.AddForce(Vector3.down * Time.deltaTime * 10);
 
-        // --- Get input ---
         x = Input.GetAxisRaw("Horizontal");
         y = Input.GetAxisRaw("Vertical");
         bool forwardPressed = y > 0;
         bool backwardPressed = y < 0;
 
-        // --- Counter movement to prevent sliding ---
-        Vector2 mag = FindVelRelativeToLook();
-        CounterMovement(x, y, mag);
+        // Removed CounterMovement call
 
-        // --- Jump ---
         if (readyToJump && jumping) Jump();
 
-        // --- Sprint handling ---
         bool sprintPressed = Input.GetKey(sprintKey);
         bool sprintReleased = Input.GetKeyUp(sprintKey);
 
@@ -234,17 +194,14 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        // --- Determine target speed ---
-        float targetSpeed = isSprinting ? sprintSpeed : (crouching ? walkSpeed * crouchSpeedMultiplier : walkSpeed);
+        float targetSpeed = isSprinting ? sprintSpeed : (crouching ? walkSpeed : walkSpeed);
 
-        // --- Air control multiplier ---
         float controlMultiplier = 1f;
         if (!grounded)
         {
             controlMultiplier = forwardPressed ? 0.8f : (backwardPressed ? 0.5f : 0.8f);
         }
 
-        // --- Calculate movement direction relative to player orientation ---
         Vector3 forwardDir = orientation.forward;
         Vector3 rightDir = orientation.right;
         forwardDir.y = 0f;
@@ -255,35 +212,15 @@ public class PlayerMovement : MonoBehaviour
         Vector3 moveDir = forwardDir * y + rightDir * x;
         if (moveDir.sqrMagnitude > 1f) moveDir.Normalize();
 
-        // --- Apply horizontal velocity with air control ---
         Vector3 horizontalVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
         Vector3 desiredVel = moveDir * targetSpeed * controlMultiplier;
 
-        // Apply sprint jump boost if active or if sprintJumping
-        if (sprintJumping && sprintJumpBoostTimer > 0f)
-        {
-            desiredVel += orientation.forward * sprintJumpBoost;
-            sprintJumpBoostTimer -= Time.fixedDeltaTime;
-        }
-
-        // Apply velocity
         Vector3 velocityChange = desiredVel - horizontalVel;
         rb.AddForce(velocityChange, ForceMode.VelocityChange);
 
-        // Reset boost when grounded
-        if (grounded && sprintJumping)
-        {
-            sprintJumping = false;
-            sprintJumpBoostTimer = 0f;
-            sprintJumpBoost = 0f; // reset the boost
-        }
-
-
-        // --- Apply gravity ---
         if (!grounded)
             rb.AddForce(Vector3.up * Physics.gravity.y * Time.deltaTime);
 
-        // --- Stamina drain / regen ---
         if (isSprinting)
         {
             currentStamina -= staminaDrain * Time.fixedDeltaTime;
@@ -298,7 +235,6 @@ public class PlayerMovement : MonoBehaviour
         if (staminaBar != null)
             staminaBar.SetStamina(currentStamina);
 
-        // --- Limit speed ---
         float maxVel = targetSpeed;
         Vector3 flatVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
         if (flatVel.magnitude > maxVel)
@@ -308,25 +244,13 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-
     private void Jump()
     {
         if (grounded && readyToJump)
         {
             readyToJump = false;
 
-            // Apply upward jump force
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-            // Trigger sprint jump boost
-            if (isSprinting && y > 0)
-            {
-                sprintJumping = true;
-                sprintJumpBoost = 3f; // increased from 2f to 3f for a stronger boost
-                sprintJumpBoostTimer = sprintJumpBoostDuration;
-
-                StartCoroutine(FOVKick(sprintFOV + 5f, sprintJumpBoostDuration));
-            }
-
 
             Invoke(nameof(ResetJump), jumpCooldown);
         }
@@ -338,7 +262,6 @@ public class PlayerMovement : MonoBehaviour
         float startFOV = playerCamera.fieldOfView;
         float time = 0f;
 
-        // Ramp up to target FOV
         while (time < duration)
         {
             playerCamera.fieldOfView = Mathf.Lerp(startFOV, targetFOV, time / duration);
@@ -347,13 +270,11 @@ public class PlayerMovement : MonoBehaviour
         }
         playerCamera.fieldOfView = targetFOV;
 
-        // Wait a tiny bit to make the kick noticeable
         yield return new WaitForSeconds(0.1f);
 
-        // Smoothly reset FOV to normal/sprint
         float resetFOV = isSprinting ? sprintFOV : normalFOV;
         float currentFOV = playerCamera.fieldOfView;
-        float resetDuration = 0.4f; // slower reset for smoother feel
+        float resetDuration = 0.4f;
         time = 0f;
 
         while (time < resetDuration)
@@ -366,8 +287,6 @@ public class PlayerMovement : MonoBehaviour
         playerCamera.fieldOfView = resetFOV;
         fovKickActive = false;
     }
-
-
 
     private void ResetJump() => readyToJump = true;
 
@@ -384,23 +303,6 @@ public class PlayerMovement : MonoBehaviour
 
         playerCam.transform.localRotation = Quaternion.Euler(xRotation, desiredX, 0);
         orientation.transform.localRotation = Quaternion.Euler(0, desiredX, 0);
-    }
-
-    private void CounterMovement(float x, float y, Vector2 mag)
-    {
-        if (!grounded) return;
-
-        if (Math.Abs(mag.x) > threshold && Math.Abs(x) < 0.05f || (mag.x < -threshold && x > 0) || (mag.x > threshold && x < 0))
-            rb.AddForce(moveSpeed * orientation.right * Time.deltaTime * -mag.x * counterMovement);
-        if (Math.Abs(mag.y) > threshold && Math.Abs(y) < 0.05f || (mag.y < -threshold && y > 0) || (mag.y > threshold && y < 0))
-            rb.AddForce(moveSpeed * orientation.forward * Time.deltaTime * -mag.y * counterMovement);
-
-        if (Mathf.Sqrt(rb.velocity.x * rb.velocity.x + rb.velocity.z * rb.velocity.z) > maxSpeed)
-        {
-            float fallspeed = rb.velocity.y;
-            Vector3 n = rb.velocity.normalized * maxSpeed;
-            rb.velocity = new Vector3(n.x, fallspeed, n.z);
-        }
     }
 
     public Vector2 FindVelRelativeToLook()
