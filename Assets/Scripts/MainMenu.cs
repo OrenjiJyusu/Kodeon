@@ -4,9 +4,14 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 public class MainMenu : MonoBehaviour
 {
+
+    public void Start()
+    {
+        Time.timeScale = 1f;
+    }
     public void PlayGame()
     {
-        FadeManager.instance.FadeOutThenLoad("Outside");
+      SceneManager.LoadScene("Outside");
     }
     public void QuitGame()
     {

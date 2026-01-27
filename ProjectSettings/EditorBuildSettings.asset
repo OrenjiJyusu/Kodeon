@@ -18,3 +18,4 @@ EditorBuildSettings:
     path: Assets/Scenes/Dungeon.unity
     guid: 5ab1366c828b55345a21becfee7236a3
   m_configObjects: {}
+  m_UseUCBPForAssetBundles: 0

@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement; // Needed for SceneManager
+using UnityEngine.SceneManagement; 
 
 public class EnterDungeon : MonoBehaviour
 {
