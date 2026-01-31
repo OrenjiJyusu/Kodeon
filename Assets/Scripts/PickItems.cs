@@ -92,7 +92,7 @@ public class PickItems : MonoBehaviour
             c.enabled = true;
 
         rb.isKinematic = false;
-        rb.velocity = Vector3.zero;
+        rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
         // Drop position in front of camera

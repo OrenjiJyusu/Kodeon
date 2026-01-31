@@ -1,12 +1,14 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
+using Mirror;
 
 public class PauseManager : MonoBehaviour
 {
+    [SerializeField] private BackendCommunicator backend;
     public GameObject pauseMenuUI;
     public MonoBehaviour[] disableOnPause;
 
-    bool isPaused;
+    public bool IsPaused { get; private set; }
     public static PauseManager Instance;
 
     void Awake()
@@ -22,15 +24,16 @@ public class PauseManager : MonoBehaviour
 
     void Start()
     {
+        if (backend == null) backend = FindObjectOfType<BackendCommunicator>();
         pauseMenuUI.SetActive(false);
-        isPaused = false;
+        IsPaused = false;
     }
 
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (isPaused) Resume();
+            if (IsPaused) Resume();
             else Pause();
         }
     }
@@ -38,37 +41,41 @@ public class PauseManager : MonoBehaviour
     public void Pause()
     {
         pauseMenuUI.SetActive(true);
-        isPaused = true;
+        IsPaused = true;
         Time.timeScale = 0f;
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
-
-        foreach (var script in disableOnPause)
-            script.enabled = false;
     }
 
     public void Resume()
     {
         pauseMenuUI.SetActive(false);
-        isPaused = false;
+        IsPaused = false;
         Time.timeScale = 1f;
 
         Cursor.visible = false;
         Cursor.lockState = CursorLockMode.Locked;
-
-        foreach (var script in disableOnPause)
-            script.enabled = true;
     }
 
     public void QuitToMainMenu()
     {
-        Time.timeScale = 1f;
-        Cursor.visible = true;
-        Cursor.lockState = CursorLockMode.None;
+        // Check if we are Host and need to unregister
+        if (NetworkServer.active && NetworkClient.isConnected)
+        {
+            // We are Host
+            string myServerId = PlayerPrefs.GetString("MyServerId", "");
+            if (!string.IsNullOrEmpty(myServerId)) {
+                backend.UnregisterServer(myServerId, () => Debug.Log("Server Unregistered"), (e) => Debug.LogError(e));
+            }
+            NetworkManager.singleton.StopHost();
+        }
+        else
+        {
+            // Just Client
+            NetworkManager.singleton.StopClient();
+        }
 
-        Destroy(gameObject); // 👈 kill pause system
-
-        SceneManager.LoadScene("Main Menu");
+        // Scene change happens automatically by NetworkManager -> Offline Scene
     }
 }

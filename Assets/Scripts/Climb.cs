@@ -60,20 +60,20 @@ public class Climb : MonoBehaviour
     {
         isSticking = true;
         rb.useGravity = false;
-        rb.velocity = Vector3.zero;
-        rb.drag = 5f;
+        rb.linearVelocity = Vector3.zero;
+        rb.linearDamping = 5f;
     }
 
     void StopSticking()
     {
         isSticking = false;
         rb.useGravity = true;
-        rb.drag = 0f;
+        rb.linearDamping = 0f;
     }
 
     void ClimbSlope()
     {
-        rb.velocity = climbDirection * climbSpeed;
+        rb.linearVelocity = climbDirection * climbSpeed;
     }
 
     void UpdateClimbPrompt()

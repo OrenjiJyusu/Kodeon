@@ -2,8 +2,9 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Mirror;
 
-public class PlayerMovement : MonoBehaviour
+public class PlayerMovement : NetworkBehaviour
 {
     Animator animator;
     int isRunningHash, isSprintingHash, isLeftHash, isRightHash, isBackwardHash,
@@ -77,12 +78,25 @@ public class PlayerMovement : MonoBehaviour
 
     void Start()
     {
-        playerScale = transform.localScale;
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        // Enforce cursor lock only for local player
+        if (isLocalPlayer)
+        {
+            playerScale = transform.localScale;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
 
-        staminaBar.SetMaxStamina(maxStamina);
-        currentStamina = maxStamina;
+        // Locate stamina bar dynamically
+        GameObject canvas = GameObject.Find("Canvas");
+        if (canvas != null)
+        {
+             Transform sbTransform = canvas.transform.Find("Staminabar");
+             if (sbTransform != null)
+             {
+                 staminaBar = sbTransform.GetComponent<StaminaBar>();
+             }
+        }
+        
         if (staminaBar != null)
             staminaBar.SetMaxStamina(maxStamina);
 
@@ -94,15 +108,73 @@ public class PlayerMovement : MonoBehaviour
         isBackwardHash = Animator.StringToHash("isBack");
         isJumpUpHash = Animator.StringToHash("isJumpUp");
         isJumpDownHash = Animator.StringToHash("isJumpDown");
+
+        // Universal Spawn Logic for Dungeon
+        // This ensures ALL players spawn at "Spawn" when entering the Dungeon scene
+        string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        if (isLocalPlayer && currentScene == "Dungeon")
+        {
+             // Priority: Try to find "Spawn" object directly
+             GameObject spawnPoint = GameObject.Find("Spawn");
+             
+             // Fallback: Use PlayerSpawn static if "Spawn" not found or different logic needed
+             if (spawnPoint == null && !string.IsNullOrEmpty(PlayerSpawn.spawnPointName))
+             {
+                 spawnPoint = GameObject.Find(PlayerSpawn.spawnPointName);
+             }
+
+             if (spawnPoint != null)
+             {
+                CharacterController cc = GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                
+                transform.position = spawnPoint.transform.position;
+                transform.rotation = spawnPoint.transform.rotation;
+                
+                if (cc != null) cc.enabled = true;
+
+                Debug.Log("PlayerMovement: Teleported to " + spawnPoint.name);
+             }
+             else
+             {
+                 Debug.LogWarning("PlayerMovement: spawn point 'Spawn' not found in Dungeon scene!");
+             }
+             
+             // Clear static after use
+             PlayerSpawn.spawnPointName = null;
+        }
+        else if (isLocalPlayer && !string.IsNullOrEmpty(PlayerSpawn.spawnPointName))
+        {
+             // Existing logic for other scenes if needed
+             GameObject spawnPoint = GameObject.Find(PlayerSpawn.spawnPointName);
+             if (spawnPoint != null)
+             {
+                CharacterController cc = GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                
+                transform.position = spawnPoint.transform.position;
+                transform.rotation = spawnPoint.transform.rotation;
+                
+                if (cc != null) cc.enabled = true;
+                
+                PlayerSpawn.spawnPointName = null;
+             }
+        }
     }
 
     private void FixedUpdate()
     {
+        if (!isLocalPlayer) return;
+        if (PauseManager.Instance != null && PauseManager.Instance.IsPaused) return;
         Movement();
     }
 
     private void Update()
     {
+        if (!isLocalPlayer) return;
+        if (animator == null || rb == null) return;
+        if (PauseManager.Instance != null && PauseManager.Instance.IsPaused) return;
+
         MyInput();
         Look();
         HandleFOV();
@@ -113,8 +185,8 @@ public class PlayerMovement : MonoBehaviour
         bool leftPressed = Keyboard.current[Key.A].isPressed;
         bool backwardPressed = Keyboard.current[Key.S].isPressed;
 
-        animator.SetBool(isJumpUpHash, !grounded && rb.velocity.y > 0f);
-        animator.SetBool(isJumpDownHash, !grounded && rb.velocity.y < 0f);
+        animator.SetBool(isJumpUpHash, !grounded && rb.linearVelocity.y > 0f);
+        animator.SetBool(isJumpDownHash, !grounded && rb.linearVelocity.y < 0f);
 
         if (grounded)
         {
@@ -212,7 +284,7 @@ public class PlayerMovement : MonoBehaviour
         Vector3 moveDir = forwardDir * y + rightDir * x;
         if (moveDir.sqrMagnitude > 1f) moveDir.Normalize();
 
-        Vector3 horizontalVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+        Vector3 horizontalVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         Vector3 desiredVel = moveDir * targetSpeed * controlMultiplier;
 
         Vector3 velocityChange = desiredVel - horizontalVel;
@@ -236,11 +308,11 @@ public class PlayerMovement : MonoBehaviour
             staminaBar.SetStamina(currentStamina);
 
         float maxVel = targetSpeed;
-        Vector3 flatVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+        Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         if (flatVel.magnitude > maxVel)
         {
             Vector3 limitedVel = flatVel.normalized * maxVel;
-            rb.velocity = new Vector3(limitedVel.x, rb.velocity.y, limitedVel.z);
+            rb.linearVelocity = new Vector3(limitedVel.x, rb.linearVelocity.y, limitedVel.z);
         }
     }
 
@@ -308,12 +380,12 @@ public class PlayerMovement : MonoBehaviour
     public Vector2 FindVelRelativeToLook()
     {
         float lookAngle = orientation.eulerAngles.y;
-        float moveAngle = Mathf.Atan2(rb.velocity.x, rb.velocity.z) * Mathf.Rad2Deg;
+        float moveAngle = Mathf.Atan2(rb.linearVelocity.x, rb.linearVelocity.z) * Mathf.Rad2Deg;
 
         float u = Mathf.DeltaAngle(lookAngle, moveAngle);
         float v = 90 - u;
 
-        float magnitude = rb.velocity.magnitude;
+        float magnitude = rb.linearVelocity.magnitude;
         float yMag = magnitude * Mathf.Cos(u * Mathf.Deg2Rad);
         float xMag = magnitude * Mathf.Cos(v * Mathf.Deg2Rad);
 

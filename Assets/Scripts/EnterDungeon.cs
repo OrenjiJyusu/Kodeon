@@ -1,8 +1,8 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement; 
+using Mirror;
 
-public class EnterDungeon : MonoBehaviour
+public class EnterDungeon : NetworkBehaviour
 {
     [Header("Interaction Settings")]
     public float interactDistance = 3f;
@@ -20,7 +20,47 @@ public class EnterDungeon : MonoBehaviour
 
     void Start()
     {
-        cam = Camera.main;
+        // Try to get Main Camera, if null, try to find by tag
+        if (cam == null) cam = Camera.main;
+        if (cam == null) cam = GetComponentInChildren<Camera>(); 
+        if (cam == null)
+        {
+             Transform head = transform.Find("Head");
+             if (head != null)
+             {
+                 Transform mainCam = head.Find("Main Camera");
+                 if (mainCam != null) cam = mainCam.GetComponent<Camera>();
+             }
+        }
+
+        // Dynamic UI Lookup if references are missing (common in Instantiate)
+        if (reticle == null || holdIndicator == null || pressEPrompt == null)
+        {
+            if (isLocalPlayer) // Only need UI for local player
+            {
+                GameObject canvas = GameObject.Find("Canvas");
+                if (canvas != null)
+                {
+                    if (reticle == null) 
+                    {
+                        Transform t = canvas.transform.Find("Crosshair");
+                        if (t) reticle = t.GetComponent<Image>();
+                    }
+
+                    if (holdIndicator == null) 
+                    {
+                        Transform t = canvas.transform.Find("EnterDungeon");
+                        if (t) holdIndicator = t.GetComponent<Image>();
+                    }
+
+                    if (pressEPrompt == null) 
+                    {
+                        Transform t = canvas.transform.Find("DungeonPrompt");
+                        if (t) pressEPrompt = t.gameObject;
+                    }
+                }
+            }
+        }
 
         if (reticle != null) reticle.enabled = true;
         if (holdIndicator != null) holdIndicator.gameObject.SetActive(false);
@@ -29,6 +69,7 @@ public class EnterDungeon : MonoBehaviour
 
     void Update()
     {
+
         if (isLoading) return;
 
         CheckForDoor();
@@ -38,10 +79,11 @@ public class EnterDungeon : MonoBehaviour
     void CheckForDoor()
     {
         RaycastHit hit;
+        if (cam == null) return;
         Vector3 rayStart = cam.transform.position;
         Vector3 rayDir = cam.transform.forward;
 
-        Debug.DrawRay(rayStart, rayDir * interactDistance, Color.red);
+        // Debug.DrawRay(rayStart, rayDir * interactDistance, Color.red);
 
         if (Physics.Raycast(rayStart, rayDir, out hit, interactDistance))
         {
@@ -80,13 +122,12 @@ public class EnterDungeon : MonoBehaviour
             if (holdTimer >= holdTime)
             {
                 isLoading = true;
-
-                // ✅ Set spawn point BEFORE scene load
+                
+                // Set locally so the client knows where to spawn in the new scene
                 PlayerSpawn.spawnPointName = currentDoor.spawnPointName;
-                Debug.Log("[EnterDungeon] Setting spawn point → " + PlayerSpawn.spawnPointName);
-
-                // ✅ Directly load the scene (no fade)
-                SceneManager.LoadScene(currentDoor.sceneToLoad);
+                
+                // Call the server to change the scene for EVERYONE
+                CmdEnterDungeon(currentDoor.sceneToLoad, currentDoor.spawnPointName);
             }
         }
         else
@@ -103,5 +144,17 @@ public class EnterDungeon : MonoBehaviour
             holdIndicator.fillAmount = 0f;
             holdIndicator.gameObject.SetActive(false);
         }
+    }
+
+    // Command sent from Client -> Server
+    [Command]
+    void CmdEnterDungeon(string sceneName, string spawnPoint)
+    {
+        // Set the spawn point name in the PlayerSpawn statics (or Game Manager)
+        PlayerSpawn.spawnPointName = spawnPoint;
+        Debug.Log("[EnterDungeon] Requesting scene change to " + sceneName + " at spawn " + spawnPoint);
+        
+        // Tell NetworkManager to switch scenes for everyone
+        NetworkManager.singleton.ServerChangeScene(sceneName);
     }
 }
