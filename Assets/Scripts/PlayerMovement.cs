@@ -85,6 +85,16 @@ public class PlayerMovement : NetworkBehaviour
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
+        else
+        {
+            // Disable camera and audio listener for remote players
+            if (playerCamera != null)
+            {
+                playerCamera.enabled = false;
+                AudioListener listener = playerCamera.GetComponent<AudioListener>();
+                if (listener != null) listener.enabled = false;
+            }
+        }
 
         // Locate stamina bar dynamically
         GameObject canvas = GameObject.Find("Canvas");
